@@ -99,7 +99,7 @@ export class YouTubeService {
         },
       });
 
-      this.logger.log(`Sesión en vivo terminada: ${session.videoTitle}`);
+      this.logger.log(`Live session ended: ${session.videoTitle}`);
     }
   }
 

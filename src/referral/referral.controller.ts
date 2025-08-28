@@ -36,7 +36,7 @@ export class ReferralController {
         : undefined);
 
     if (!url) {
-      throw new Error('No hay URL de YouTube disponible para esta sesión');
+      throw new Error('No YouTube URL available for this session');
     }
 
     return { url };
@@ -61,7 +61,7 @@ export class ReferralController {
   async expireReferrals(@Param('liveSessionId') liveSessionId: string) {
     const result = await this.referralService.expireReferralsBySession(liveSessionId);
     return {
-      message: `Referrals de la sesión ${liveSessionId} expirados.`,
+      message: `Session referrals ${liveSessionId} expired.`,
       result,
     };
   }
