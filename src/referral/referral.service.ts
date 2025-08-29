@@ -36,7 +36,7 @@ export class ReferralService {
     return {
       referral: {
         ...referral,
-        link: `http://localhost:3000/referrals/open/${code}`,
+        link:`${process.env.BASE_URL}/referrals/open/${code}`
       },
       message: 'Referral link successfully created',
     };
