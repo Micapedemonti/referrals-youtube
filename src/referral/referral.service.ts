@@ -32,11 +32,10 @@ export class ReferralService {
       },
       include: { liveSession: true },
     });
-
     return {
       referral: {
         ...referral,
-        link:`${process.env.BASE_URL}/referrals/open/${code}`
+        link:`${process.env.PUBLIC_BASE_URL}/referrals/open/${code}`
       },
       message: 'Referral link successfully created',
     };
