@@ -1,15 +1,18 @@
-import { IsString, IsNotEmpty } from 'class-validator';
+import { IsAlphanumeric,Length,IsNumberString, IsNotEmpty } from 'class-validator';
 
 export class CreateReferralWithUserDto {
-  @IsString()
+  @IsAlphanumeric() 
+  @Length(1, 20)  
   @IsNotEmpty()
   username: string;
 
-  @IsString()
+  @IsNumberString()
+  @Length(1, 10) 
   @IsNotEmpty()
   uidBitunix: string;
 
-  @IsString()
+  @IsAlphanumeric()
+  @Length(1, 30) 
   @IsNotEmpty()
   tradingView: string;
 }

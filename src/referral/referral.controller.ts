@@ -23,10 +23,10 @@ export class ReferralController {
     const ua = req.headers['user-agent'] || 'unknown';
 
     // Hash simple para identificar al visitante
-   // const ipHash = Buffer.from(ip.toString()).toString('base64');
-    //const uaHash = Buffer.from(ua.toString()).toString('base64');
-    const ipHash = Buffer.from(ip + Date.now().toString()).toString('base64');
-    const uaHash = Buffer.from(ua).toString('base64');
+    const ipHash = Buffer.from(ip.toString()).toString('base64');
+    const uaHash = Buffer.from(ua.toString()).toString('base64');
+   // const ipHash = Buffer.from(ip + Date.now().toString()).toString('base64');
+    //const uaHash = Buffer.from(ua).toString('base64');
     const referral = await this.referralService.openReferral(code, ipHash, uaHash);
 
     const url =

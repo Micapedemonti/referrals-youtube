@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
+const linkRefe = (process.env.PUBLIC_BASE_URL ?? 'http://localhost:3000').replace(/\/+$/, '');
+
 @Injectable()
 export class RankingService {
   constructor(private prisma: PrismaService) {}
@@ -27,6 +29,8 @@ export class RankingService {
     const transformed = referrals.map(r => ({
       username: r.username,
       clickCount: r.clicks.length,
+      referralLink: `${linkRefe}/referrals/open/${r.code}`,
+
     }));
 
     transformed.sort((a, b) => b.clickCount - a.clickCount);
@@ -52,6 +56,8 @@ export class RankingService {
     const transformed = referrals.map(r => ({
       username: r.username,
       clickCount: r.clicks.length,
+      referralLink: `${linkRefe}/referrals/open/${r.code}`,
+
     }));
 
     transformed.sort((a, b) => b.clickCount - a.clickCount);
