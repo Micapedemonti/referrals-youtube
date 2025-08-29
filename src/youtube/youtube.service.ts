@@ -21,7 +21,7 @@ export class YouTubeService {
 
   constructor(private prisma: PrismaService) {}
 
-  @Cron(CronExpression.EVERY_MINUTE)
+  @Cron('*/15 * * * * *')
   async checkLiveStreams() {
     try {
       const channels = await this.prisma.youTubeChannel.findMany({
@@ -44,6 +44,9 @@ export class YouTubeService {
 
       const liveVideos = response.data.items;
 
+      this.logger.log(`Consultando canal: ${channel.channelId}`);
+      this.logger.log(`Items devueltos: ${JSON.stringify(liveVideos)}`);
+      
       if (liveVideos.length > 0) {
         const liveVideo = liveVideos[0];
         await this.createOrUpdateLiveSession(channel, liveVideo);
