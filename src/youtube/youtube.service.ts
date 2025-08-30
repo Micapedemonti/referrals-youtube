@@ -21,7 +21,7 @@ export class YouTubeService {
 
   constructor(private prisma: PrismaService) {}
 
-  @Cron('*/15 * * * * *')
+  @Cron('*/4 * * * *')
   async checkLiveStreams() {
     try {
       const channels = await this.prisma.youTubeChannel.findMany({
