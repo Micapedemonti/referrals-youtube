@@ -15,25 +15,10 @@ export class YouTubeController {
     );
   }
 
-  @Post('simulate-live')
-  async simulateLiveSession(
-    @Body() body: { videoTitle?: string; youtubeVideoId?: string }
-  ) {
-    return this.youtubeService.simulateLiveSession(
-      body.videoTitle || 'Simulated Transmission for Testing',
-      body.youtubeVideoId || 'simulated_' + Date.now()
-    );
-  }
 
   @Get('live-sessions')
   async getActiveLiveSessions() {
     return this.youtubeService.getActiveLiveSessions();
   }
 
-  @Post('check-now')
-  async checkLiveStreamsNow() {
-    // Endpoint manual para verificar transmisiones en vivo
-    await this.youtubeService.checkLiveStreams();
-    return { message: 'Live stream verification complete' };
-  }
 } 
