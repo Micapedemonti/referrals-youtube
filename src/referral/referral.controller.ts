@@ -2,6 +2,22 @@ import { Controller, Post, Get, Body, Param, Redirect, Req } from '@nestjs/commo
 import { ReferralService } from './referral.service';
 import { Request } from 'express';
 import { CreateReferralWithUserDto } from './dto/create-referral.dto';
+import { createHash } from 'crypto';
+
+
+function sha256(s: string) {
+  return createHash('sha256').update(s).digest('hex');
+}
+function getClientIp(req: any) {
+  const xff = req.headers['x-forwarded-for'];
+  let ip = Array.isArray(xff) ? xff[0] : (xff || '');
+  if (typeof ip === 'string' && ip.includes(',')) ip = ip.split(',')[0];
+  if (!ip) ip = req.ip || req.socket?.remoteAddress || '';
+  ip = String(ip).trim().replace(/^::ffff:/, '');
+  if (ip === '::1') ip = '127.0.0.1';
+  return ip;
+}
+
 
 @Controller('referrals')
 export class ReferralController {
@@ -18,27 +34,34 @@ export class ReferralController {
 
   @Get('open/:code')
   @Redirect(undefined, 302)
-  async openReferral(@Param('code') code: string, @Req() req: Request) {
-    const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown';
-    const ua = req.headers['user-agent'] || 'unknown';
-
-    // Hash simple para identificar al visitante
-    const ipHash = Buffer.from(ip.toString()).toString('base64');
-    const uaHash = Buffer.from(ua.toString()).toString('base64');
-   // const ipHash = Buffer.from(ip + Date.now().toString()).toString('base64');
-    //const uaHash = Buffer.from(ua).toString('base64');
-    const referral = await this.referralService.openReferral(code, ipHash, uaHash);
-
+  async openReferral(@Param('code') code: string, @Req() req: any) {
+    const sessionId: string = req.sessionId; // <-- viene del middleware de main.ts
+    const ip = getClientIp(req);
+    const ua = String(req.headers['user-agent'] || '').toLowerCase().trim();
+  
+    // (opcional) no contar bots de previews
+    if (/bot|facebookexternalhit|twitterbot|slackbot|headlesschrome/i.test(ua)) {
+      const referral = await this.referralService.getReferralByCode(code);
+      const url =
+        referral.liveSession.youtubeUrl ||
+        (referral.liveSession.youtubeVideoId
+          ? `https://www.youtube.com/watch?v=${referral.liveSession.youtubeVideoId}`
+          : undefined);
+      if (!url) throw new Error('No YouTube URL available for this session');
+      return { url };
+    }
+  
+    const ipHash = sha256(ip);
+    const uaHash = sha256(ua);
+  
+    const referral = await this.referralService.openReferral(code, ipHash, uaHash, sessionId);
+  
     const url =
       referral.liveSession.youtubeUrl ||
       (referral.liveSession.youtubeVideoId
         ? `https://www.youtube.com/watch?v=${referral.liveSession.youtubeVideoId}`
         : undefined);
-
-    if (!url) {
-      throw new Error('No YouTube URL available for this session');
-    }
-
+    if (!url) throw new Error('No YouTube URL available for this session');
     return { url };
   }
 

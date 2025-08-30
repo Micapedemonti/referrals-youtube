@@ -41,43 +41,85 @@ export class ReferralService {
     };
   }
 
-  async openReferral(code: string, ipHash: string, uaHash: string) {
+  async openReferral(code: string, ipHash: string, uaHash: string, sessionId?: string) {
     const referral = await this.prisma.referral.findUnique({
-      where: { code },
-      include: { liveSession: true, clicks: true },
+    where: { code },
+    include: { liveSession: true, clicks: true },
+  });
+
+  if (!referral) throw new NotFoundException('Reference not found');
+  if (!referral.liveSession.isActive || referral.liveSession.status !== 'LIVE') {
+    throw new NotFoundException('The live session is not active');
+  }
+
+  if (sessionId) {
+    const exists = await this.prisma.click.findFirst({
+      where: {
+        referralId: referral.id,
+        liveSessionId: referral.liveSessionId,
+        sessionId,
+      },
+      select: { id: true },
     });
 
-    if (!referral) throw new NotFoundException('Reference not found');
-    if (!referral.liveSession.isActive || referral.liveSession.status !== 'LIVE') {
-      throw new NotFoundException('The live session is not active');
+    if (!exists) {
+      try {
+        await this.prisma.click.create({
+          data: {
+            referralId: referral.id,
+            liveSessionId: referral.liveSessionId,
+            ipHash,
+            uaHash,
+            sessionId,
+          },
+        });
+        await this.prisma.referral.update({
+          where: { id: referral.id },
+          data: {
+            lastOpenedAt: new Date(),
+            clickCount: { increment: 1 },
+          },
+        });
+      } catch (error: any) {
+        if (error.code !== 'P2002') throw error;
+      }
     }
 
-    try {
-      await this.prisma.click.create({
-        data: {
-          referralId: referral.id,
-          liveSessionId: referral.liveSessionId,
-          ipHash,
-          uaHash,
-        },
-      });
-
-      await this.prisma.referral.update({
-        where: { id: referral.id },
-        data: {
-          lastOpenedAt: new Date(),
-          clickCount: { increment: 1 },
-        },
-      });
-    } catch (error: any) {
-      if (error.code !== 'P2002') throw error;
-    }
-
+    // devolver el referral actualizado
     return this.prisma.referral.findUnique({
       where: { id: referral.id },
       include: { liveSession: true },
     });
   }
+  // --- FIN DEDUPE POR SESIÓN ---
+
+  // Fallback si por alguna razón no hay sessionId (no debería pasar)
+  try {
+    await this.prisma.click.create({
+      data: {
+        referralId: referral.id,
+        liveSessionId: referral.liveSessionId,
+        ipHash,
+        uaHash,
+      },
+    });
+    await this.prisma.referral.update({
+      where: { id: referral.id },
+      data: {
+        lastOpenedAt: new Date(),
+        clickCount: { increment: 1 },
+      },
+    });
+  } catch (error: any) {
+    if (error.code !== 'P2002') throw error;
+  }
+
+  return this.prisma.referral.findUnique({
+    where: { id: referral.id },
+    include: { liveSession: true },
+  });
+}
+
 
   async getReferralByCode(code: string) {
     return this.prisma.referral.findUnique({
