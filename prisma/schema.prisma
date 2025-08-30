@@ -10,71 +10,69 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-
 model LiveSession {
-  id              String      @id @default(cuid())
-  status          LiveStatus
-  youtubeUrl      String
-  youtubeVideoId  String      @unique
-  channelId       String
-  channelTitle    String
-  videoTitle      String
-  startedAt       DateTime    @default(now())
-  endedAt         DateTime?
-  isActive        Boolean     @default(true)
+  id             String     @id @default(cuid())
+  status         LiveStatus
+  youtubeUrl     String
+  youtubeVideoId String     @unique
+  channelId      String
+  channelTitle   String
+  videoTitle     String
+  startedAt      DateTime   @default(now())
+  endedAt        DateTime?
+  isActive       Boolean    @default(true)
 
-  referrals       Referral[]
-  clicks          Click[]
+  referrals Referral[]
+  clicks    Click[]
 
   @@index([channelId, isActive])
   @@index([youtubeVideoId])
 }
 
-enum LiveStatus { 
+enum LiveStatus {
   WAITING
   LIVE
   ENDED
 }
 
 model Referral {
-  id            String   @id @default(cuid())
-  code          String   @unique
-  username      String  
-  uidBitunix    String   
-  tradingView   String  
+  id            String      @id @default(cuid())
+  code          String      @unique
+  username      String
+  uidBitunix    String
+  tradingView   String
   liveSessionId String
-  createdAt     DateTime @default(now())
+  createdAt     DateTime    @default(now())
   lastOpenedAt  DateTime?
-  isExpired     Boolean  @default(false)
- clickCount Int @default(0)
+  isExpired     Boolean     @default(false)
+  clickCount    Int         @default(0)
   liveSession   LiveSession @relation(fields: [liveSessionId], references: [id])
   clicks        Click[]
 }
 
-
 model YouTubeChannel {
-  id            String   @id @default(cuid())
-  channelId     String   @unique
-  channelTitle  String
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           String   @id @default(cuid())
+  channelId    String   @unique
+  channelTitle String
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@index([channelId, isActive])
 }
 
 model Click {
-  id             String      @id @default(cuid())
-  referralId     String
-  liveSessionId  String
-  ipHash         String
-  uaHash         String
-  sessionId      String?             // <- NUEVO
-  createdAt      DateTime    @default(now())
+  id            String   @id @default(cuid())
+  referralId    String
+  liveSessionId String
+  ipHash        String
+  uaHash        String
+  sessionId     String?
+  createdAt     DateTime @default(now())
 
-  referral       Referral    @relation(fields: [referralId], references: [id])
-  liveSession    LiveSession @relation(fields: [liveSessionId], references: [id])
+  referral    Referral    @relation(fields: [referralId], references: [id])
+  liveSession LiveSession @relation(fields: [liveSessionId], references: [id])
 
   @@unique([ipHash, uaHash, liveSessionId, referralId], name: "click_unique_visitor_per_referral_session")
-  @@index([referralId, liveSessionId, sessionId])   // <- ayuda a consultar por sesión
+  @@index([referralId, liveSessionId, sessionId]) // opcional, ayuda a buscar
 }
