@@ -66,12 +66,10 @@ export class ReferralService {
         where: { id: referral.id },
         data: {
           lastOpenedAt: new Date(),
-          clickCount: { increment: 1 }, 
+          clickCount: { increment: 1 },
         },
-        include: { liveSession: true, clicks: true },
       });
-    } catch (error) {
-      // P2002 = violación de unique constraint (ya clickeó el mismo usuario/UA/IP)
+    } catch (error: any) {
       if (error.code !== 'P2002') throw error;
     }
 
@@ -138,5 +136,4 @@ export class ReferralService {
       data: { isExpired: true },
     });
   }
-  
 }
