@@ -1,7 +1,19 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { LiveSession } from '@prisma/client';
-import * as xml2js from 'xml2js';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import axios from 'axios';
+import { YouTubeChannel, LiveSession } from '@prisma/client';
+
+interface YouTubeSearchItem {
+  id: { videoId: string };
+  snippet: {
+    title: string;
+    channelTitle: string;
+    publishedAt: string;
+    description: string;
+    thumbnails: { default: { url: string }; medium?: { url: string }; high?: { url: string } };
+  };
+}
 
 @Injectable()
 export class YouTubeService {
@@ -9,91 +21,145 @@ export class YouTubeService {
 
   constructor(private prisma: PrismaService) {}
 
+  //@Cron('*/4 * * * *')
+  async checkLiveStreams() {
+    try {
+      const channels = await this.prisma.youTubeChannel.findMany({
+        where: { isActive: true },
+      });
+
+      for (const channel of channels) {
+        await this.checkChannelLiveStatus(channel);
+      }
+    } catch (error) {
+      this.logger.error('Error checking live streams:', error);
+    }
+  }
+
+  private async checkChannelLiveStatus(channel: YouTubeChannel): Promise<void> {
+    try {
+      const response = await axios.get(
+        `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${channel.channelId}&type=video&eventType=live&key=${process.env.YOUTUBE_API_KEY}`
+      );
+
+      const liveVideos = response.data.items;
+
+      this.logger.log(`Consultando canal: ${channel.channelId}`);
+      this.logger.log(`Items devueltos: ${JSON.stringify(liveVideos)}`);
+      
+      if (liveVideos.length > 0) {
+        const liveVideo = liveVideos[0];
+        await this.createOrUpdateLiveSession(channel, liveVideo);
+      } else {
+        await this.endActiveLiveSessions(channel.channelId);
+      }
+    } catch (error) {
+      this.logger.error(`Error checking channel ${channel.channelId}:`, error);
+    }
+  }
+
+  private async createOrUpdateLiveSession(channel: YouTubeChannel, video: YouTubeSearchItem): Promise<void> {
+    const existingSession = await this.prisma.liveSession.findFirst({
+      where: {
+        youtubeVideoId: video.id.videoId,
+        isActive: true,
+      },
+    });
+
+    if (!existingSession) {
+      await this.prisma.liveSession.create({
+        data: {
+          youtubeVideoId: video.id.videoId,
+          youtubeUrl: `https://www.youtube.com/watch?v=${video.id.videoId}`,
+          channelId: process.env.YOUTUBE_CHANNEL_ID || '',
+          channelTitle: process.env.YOUTUBE_CHANNEL_TITLE || '',
+          videoTitle: video.snippet.title,
+          status: 'LIVE',
+          isActive: true,
+        },
+      });
+
+      this.logger.log(`New live stream detected: ${video.snippet.title}`);
+    }
+  }
+
+  private async endActiveLiveSessions(channelId: string) {
+    const activeSessions = await this.prisma.liveSession.findMany({
+      where: {
+        channelId,
+        isActive: true,
+        status: 'LIVE',
+      },
+    });
+
+    for (const session of activeSessions) {
+      await this.prisma.liveSession.update({
+        where: { id: session.id },
+        data: {
+          status: 'ENDED',
+          isActive: false,
+          endedAt: new Date(),
+        },
+      });
+
+      this.logger.log(`Live session ended: ${session.videoTitle}`);
+    }
+  }
+
   async addChannel(channelId: string, channelTitle: string) {
-    return this.prisma.youTubeChannel.upsert({
+    const channel = await this.prisma.youTubeChannel.upsert({
       where: { channelId },
       update: { channelTitle, isActive: true },
       create: { channelId, channelTitle, isActive: true },
     });
+
+    return channel;
   }
-  
-  /**
-   * Procesa las notificaciones XML que manda YouTube (PubSubHubbub)
-   */
-  async handleNotification(xmlBody: string): Promise<void> {
-    try {
-      // Parsear XML a JSON
-      const parsed = await xml2js.parseStringPromise(xmlBody, { explicitArray: false });
-      const entry = parsed.feed?.entry;
-
-      if (!entry) {
-        this.logger.log('📭 Notificación recibida pero sin entry (probablemente baja de video o cambio menor)');
-        return;
-      }
-
-      const videoId = entry['yt:videoId'];
-      const channelId = entry['yt:channelId'];
-      const title = entry.title;
-      const link = entry.link?.['$']?.href;
-
-      this.logger.log(`🔔 Nuevo evento detectado - Canal: ${channelId}, Video: ${videoId}, Título: ${title}`);
-
-      // Verificar si ya existe la sesión activa para ese video
-      const existingSession = await this.prisma.liveSession.findFirst({
-        where: { youtubeVideoId: videoId, isActive: true },
-      });
-
-      if (!existingSession) {
-        await this.prisma.liveSession.create({
-          data: {
-            youtubeVideoId: videoId,
-            youtubeUrl: link,
-            channelId,
-            channelTitle: entry.author?.name || 'Desconocido',
-            videoTitle: title,
-            status: 'LIVE',
-            isActive: true,
-            startedAt: new Date(),
-          },
-        });
-
-        this.logger.log(`✅ Nueva transmisión en vivo guardada: ${title}`);
-      }
-    } catch (error) {
-      this.logger.error('❌ Error procesando notificación de YouTube', error);
-    }
-  }
-
-  /**
-   * Marca una transmisión como terminada manualmente
-   */
-  async endSession(videoId: string): Promise<LiveSession | null> {
-    const session = await this.prisma.liveSession.findFirst({
-      where: { youtubeVideoId: videoId, isActive: true },
-    });
-
-    if (!session) {
-      this.logger.warn(`⚠️ No se encontró sesión activa para videoId ${videoId}`);
-      return null;
-    }
-
-    return this.prisma.liveSession.update({
-      where: { id: session.id },
-      data: {
-        status: 'ENDED',
-        isActive: false,
-        endedAt: new Date(),
+  async getActiveLiveSessions() {
+    const sessions = await this.prisma.liveSession.findMany({
+      where: {
+        isActive: true,
+        status: 'LIVE',
+      },
+      include: {
+        referrals: true,
       },
     });
-  }
-
-  /**
-   * Devuelve sesiones activas
-   */
-  async getActiveLiveSessions() {
-    return this.prisma.liveSession.findMany({
-      where: { isActive: true, status: 'LIVE' },
-      include: { referrals: true },
+  
+    return sessions.map((session) => {
+      const now = new Date();
+      const elapsedMs = (session.endedAt ?? now).getTime() - session.startedAt.getTime();
+      const elapsedSeconds = Math.floor(elapsedMs / 1000);
+  
+      return {
+        ...session,
+        elapsedSeconds,
+      };
     });
   }
-}
+  
+
+  async simulateLiveSession(videoTitle: string, youtubeVideoId: string) {
+    const liveSession = await this.prisma.liveSession.create({
+      data: {
+        status: 'LIVE',
+        youtubeUrl: `https://www.youtube.com/watch?v=${youtubeVideoId}`,
+        youtubeVideoId,
+        channelId: process.env.YOUTUBE_CHANNEL_ID || '',
+        channelTitle: process.env.YOUTUBE_CHANNEL_TITLE || '',
+        videoTitle,
+        startedAt: new Date(),
+        isActive: true,
+      },
+      include: {
+        referrals: true,
+      }
+    });
+
+    this.logger.log(`Simulated live session created: ${videoTitle}`);
+    return {
+      message: 'Simulated live session successfully created',
+      liveSession,
+    };
+  }
+} 

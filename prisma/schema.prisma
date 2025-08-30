@@ -74,5 +74,5 @@ model Click {
   referral       Referral    @relation(fields: [referralId], references: [id])
   liveSession    LiveSession @relation(fields: [liveSessionId], references: [id])
 
-// @@unique([ipHash, uaHash, liveSessionId, referralId], name: "click_unique_visitor_per_referral_session")
+@@unique([ipHash, uaHash, liveSessionId, referralId], name: "click_unique_visitor_per_referral_session")
 }
